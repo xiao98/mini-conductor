@@ -12,3 +12,4 @@ results/
 *.sqlite-journal
 wandb/
 .DS_Store
+smoke_out/

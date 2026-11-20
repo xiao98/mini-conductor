@@ -1,0 +1,44 @@
+# Smoke-test pool: mock workers only (no GPU worker, no API). Used by scripts/smoke_cpu.py
+# to exercise the full 03 -> 04 -> 05 -> 06 plumbing on CPU with a tiny model.
+# NOTHING produced with this pool is an experimental result.
+
+name: smoke_mock
+reference_cost_usd: 0.0001
+max_steps: 5
+max_depth: 2
+
+workers:
+  - id: 0
+    name: mock-cheap
+    backend: mock
+    model_name: mock-cheap
+    input_cost_per_mtok: 1.0
+    output_cost_per_mtok: 2.0
+    cost_tier: "low"
+    description: Cheap mock worker.
+
+  - id: 1
+    name: mock-pricey
+    backend: mock
+    model_name: mock-pricey
+    input_cost_per_mtok: 20.0
+    output_cost_per_mtok: 40.0
+    cost_tier: "high"
+    description: Expensive mock worker.
+
+  - id: 2
+    name: self
+    backend: conductor_self
+    model_name: self
+    cost_tier: "recursive orchestrator"
+    description: Recursive call to the Conductor itself.
+
+held_out_workers:
+  - id: 3
+    name: mock-heldout
+    backend: mock
+    model_name: mock-heldout
+    input_cost_per_mtok: 40.0
+    output_cost_per_mtok: 80.0
+    cost_tier: "highest"
+    description: Held-out mock worker.

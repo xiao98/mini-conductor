@@ -24,32 +24,45 @@ Sakana AI commercialized *The Conductor* into **Sakana Fugu** (`arXiv:2606.21228
 
 ---
 
+## Status
+
+**No experimental results are checked in.** Every figure and number must come from a real run of
+`scripts/06_run_matrix.py`; the aggregator only draws runs whose output files exist. What has
+been verified so far: unit tests (`pytest -v`), the real HuggingFace dataset build, and a CPU
+plumbing smoke test (`scripts/smoke_cpu.py`: 135M toy model + mock workers through
+SFT -> GRPO -> resume -> eval -> figures). The smoke test proves the pipeline executes, nothing more.
+
+---
+
 ## Project Structure
 
 ```text
 mini-conductor/
 ├── configs/
 │   ├── pool_claude_hybrid.yaml      # Pool A: Local-7B + Haiku + Sonnet + self (+ held-out Opus)
-│   └── pool_open_specialists.yaml   # Pool B: Math-7B + Coder-7B + Base-7B + self (0 API cost)
+│   ├── pool_open_specialists.yaml   # Pool B: Math-7B + Coder-7B + Base-7B + self (0 API cost)
+│   └── pool_smoke_mock.yaml         # Mock workers for the CPU smoke test only
 ├── src/
-│   ├── config.py                    # Pool/Train configs + ID-Permutation Augmentation
-│   ├── prompts.py                   # Outer & recursive Conductor prompts + Worker context injection
-│   ├── parser.py                    # Safe ast.literal_eval parser + strict DAG/cycle validator
-│   ├── workers.py                   # Async Anthropic & Local HF backends + SQLite response cache
+│   ├── config.py                    # Pool configs + ID-Permutation Augmentation
+│   ├── prompts.py                   # Outer & recursive Conductor prompts + worker prompts
+│   ├── parser.py                    # ast.literal_eval parser + strict acyclic DAG validator
+│   ├── workers.py                   # Claude backend (throttle/backoff/SQLite cache), GPU micro-batcher
 │   ├── executor.py                  # Layered async DAG executor + bounded recursion + trace logger
-│   ├── verifiers.py                 # Deterministic Math (sympy), Code (sandbox), and GPQA verifiers
-│   ├── grpo.py                      # Pure PyTorch GRPO trainer (top_level & all_depth credit modes)
-│   └── metrics.py                   # Topology analytics + publication-ready RQ1–RQ4 plots
+│   ├── verifiers.py                 # Deterministic Math (sympy), Code (subprocess sandbox), MCQ
+│   ├── grpo.py                      # Pure PyTorch GRPO (top_level & all_depth credit modes)
+│   ├── runtime.py                   # Model loading + generation glue shared by train/eval
+│   └── metrics.py                   # Topology analytics + RQ1-RQ4 plots
 ├── scripts/
-│   ├── 01_build_dataset.py          # Prepare unified train/eval JSONL datasets
-│   ├── 02_gen_sft_data.py           # Synthesize & verify diverse warm-start trajectories via Claude
-│   ├── 03_train_sft.py              # Fast LoRA SFT warmup (format compliance > 95%)
-│   ├── 04_train_grpo.py             # Main GRPO training loop with Drive checkpoint resume
-│   └── 05_eval_suite.py             # Run RQ1–RQ4 evaluations and generate figures
-├── notebooks/
-│   └── colab_h100_quickstart.ipynb  # One-click Colab H100 notebook
-└── tests/
-    └── test_core.py                 # Comprehensive local unit tests (parser, executor, RL math)
+│   ├── 00_check_api.py              # Preflight: 1 minimal request per Claude model in the pool
+│   ├── 01_build_dataset.py          # MATH L3-5 / MATH-500, MBPP, GPQA-Diamond or MMLU-Pro STEM
+│   ├── 02_gen_sft_data.py           # Claude-synthesized, verifier-filtered warm-start trajectories
+│   ├── 03_train_sft.py              # LoRA SFT warm start
+│   ├── 04_train_grpo.py             # One GRPO run (resumable)
+│   ├── 05_eval_suite.py             # One adapter x test-time pool conditions (+ baselines)
+│   ├── 06_run_matrix.py             # ALL runs for RQ1-RQ4: train -> eval -> figures (resumable)
+│   └── smoke_cpu.py                 # CPU end-to-end plumbing check (no GPU / API key)
+├── notebooks/colab_h100_quickstart.ipynb
+└── tests/                           # test_core.py, test_pipeline.py
 ```
 
 ---
@@ -59,46 +72,52 @@ mini-conductor/
 ```bash
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY="sk-ant-..."
+export HF_TOKEN="hf_..."          # optional: gated GPQA-Diamond (else MMLU-Pro STEM is used)
 
-# 1. Verify all core modules locally
-pytest -v
-
-# 2. Build datasets (use --demo for instant offline smoke test)
+pytest -v                                         # 1. unit tests
+python scripts/00_check_api.py                    # 2. 1 request per Claude model: IDs + request shape
 python scripts/01_build_dataset.py --output_dir data
 
-# 3. Stage 0: Generate verified SFT warmup trajectories & run light LoRA SFT
-python scripts/02_gen_sft_data.py \
-  --pool configs/pool_claude_hybrid.yaml \
-  --dataset data/train.jsonl \
-  --output data/sft_warmup.jsonl \
-  --num_samples 300
+# 3. Stage 0: Claude-synthesized warm start (canonical worker IDs) + LoRA SFT
+python scripts/02_gen_sft_data.py --dataset data/train.jsonl --output data/sft_warmup.jsonl --num_samples 300
+python scripts/03_train_sft.py --data data/sft_warmup.jsonl --output_dir checkpoints/sft_warmup
 
-python scripts/03_train_sft.py \
-  --model Qwen/Qwen2.5-7B-Instruct \
-  --data data/sft_warmup.jsonl \
-  --output_dir checkpoints/sft_warmup
-
-# 4. Stage 1: End-to-End GRPO Training (e.g., RQ2 all-depth recursive + RQ3 ID permutation)
-python scripts/04_train_grpo.py \
-  --model Qwen/Qwen2.5-7B-Instruct \
-  --init_adapter checkpoints/sft_warmup \
-  --pool configs/pool_claude_hybrid.yaml \
-  --train_data data/train.jsonl \
-  --credit_mode all_depth \
-  --allow_recursion \
-  --permute_ids \
-  --cost_lambda 0.05 \
-  --save_dir checkpoints/grpo_all_depth_perm
-
-# 5. Evaluate RQ1–RQ4 and export figures
-python scripts/05_eval_suite.py \
-  --model Qwen/Qwen2.5-7B-Instruct \
-  --adapter checkpoints/grpo_all_depth_perm/latest \
-  --pool configs/pool_claude_hybrid.yaml \
-  --eval_data data/eval_all.jsonl \
-  --include_held_out \
-  --output_dir results/rq_eval
+# 4. Stage 1 + evaluation + figures for RQ1-RQ4, resumable (point --root at Google Drive)
+python scripts/06_run_matrix.py --root /content/drive/MyDrive/mc_exp --init_adapter checkpoints/sft_warmup
 ```
+
+Re-running step 4 after a Colab disconnect continues where it stopped. Use `--only base,rq3_perm`
+to run a subset, `--figures_only` to re-draw.
+
+### The experiment matrix
+
+All runs share the SFT warm start, seed, data, pool, hyperparameters and eval subset; each
+differs from `base` in exactly one switch.
+
+| Run | Differs from `base` by | Used for |
+| :-- | :-- | :-- |
+| `base` | recursion on, `all_depth` credit, canonical IDs, `cost_lambda=0` | RQ1 curves; shared arm of RQ2/RQ3/RQ4 |
+| `rq2_no_recursion` | `self` worker removed | RQ2 |
+| `rq2_top_level` | `--credit_mode top_level` | RQ2 |
+| `rq3_perm` | `--permute_ids` (ID-Permutation Augmentation) | RQ3 |
+| `rq4_lam0.05` / `0.15` / `0.30` | `--cost_lambda` | RQ4 |
+
+Each adapter is evaluated greedily under four test-time pool conditions: `canonical`,
+`permuted_ids`, `+heldout` (Claude Opus injected zero-shot) and `+heldout+perm`. Baselines are
+single workers answering directly and a static "all solve in parallel, strongest judges" topology.
+Accuracies are reported with 95% CI half-widths; with the default 150 eval tasks a single
+accuracy is only resolved to roughly +-8 points, so raise `--eval_limit` before claiming small gaps.
+
+### Notes on the Claude backend
+
+- Current Claude models reject non-default sampling parameters, so `temperature` is never sent.
+  In the pool YAML, `temperature <= 0.25` only marks a worker as cacheable in SQLite.
+- Thinking is on by default and counts toward `max_tokens`, so Claude workers get `max_tokens: 8000`
+  and an explicit `effort: low` (model defaults differ, which would confound cost comparisons).
+- Only 429 / 5xx / connection errors are retried (exponential backoff + jitter). A 4xx such as a
+  wrong model ID fails immediately.
+- Server-side model fallbacks are deliberately NOT enabled: a silent model switch would
+  contaminate per-worker accuracy and cost. Refusals / truncations are counted in `api_stop_reasons`.
 
 ---
 

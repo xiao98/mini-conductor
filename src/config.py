@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import random
 from pathlib import Path
 from typing import Literal
@@ -33,6 +33,7 @@ class WorkerSpec:
     cost_tier: str = "free"
     max_tokens: int = 1536
     temperature: float = 0.2
+    effort: str | None = None  # Anthropic `output_config.effort`; None = model default
 
     @property
     def is_self(self) -> bool:
@@ -125,20 +126,7 @@ def build_episode_worker_view(
 
     remapped: list[WorkerSpec] = []
     for assigned_id, spec in zip(available_ids, shuffled):
-        remapped.append(
-            WorkerSpec(
-                id=assigned_id,
-                name=spec.name,
-                backend=spec.backend,
-                model_name=spec.model_name,
-                description=spec.description,
-                input_cost_per_mtok=spec.input_cost_per_mtok,
-                output_cost_per_mtok=spec.output_cost_per_mtok,
-                cost_tier=spec.cost_tier,
-                max_tokens=spec.max_tokens,
-                temperature=spec.temperature,
-            )
-        )
+        remapped.append(replace(spec, id=assigned_id))
 
     remapped.sort(key=lambda w: w.id)
     return EpisodeWorkerView(

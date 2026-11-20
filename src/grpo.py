@@ -232,6 +232,12 @@ class ConductorGRPOTrainer:
         self.config = config
         self.device = next(model.parameters()).device
 
+        # pi_old is scored in eval mode and pi_theta in train mode: any active dropout would make
+        # the importance ratio != 1 at the very first step. Zero it (LoRA dropout included).
+        for module in model.modules():
+            if isinstance(module, torch.nn.Dropout):
+                module.p = 0.0
+
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         if not trainable_params:
             raise ValueError("Model has no trainable parameters (did you attach LoRA?).")

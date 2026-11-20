@@ -10,9 +10,14 @@ import argparse
 import json
 from pathlib import Path
 import random
+import sys
 
 import torch
 from tqdm import tqdm
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.runtime import load_conductor
 
 
 def _load_sft_examples(path: Path) -> list[dict]:
@@ -37,42 +42,12 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    from peft import LoraConfig, get_peft_model
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed)
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    attn_impl = "flash_attention_2"
-    try:
-        import flash_attn  # noqa: F401
-    except Exception:
-        attn_impl = "sdpa"
-
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        attn_implementation=attn_impl,
+    model, tokenizer = load_conductor(
+        args.model, trainable=True, lora_r=args.lora_r, lora_alpha=args.lora_alpha
     )
-    model.gradient_checkpointing_enable()
-
-    lora_cfg = LoraConfig(
-        r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=0.05,
-        bias="none",
-        task_type="CAUSAL_LM",
-        target_modules=[
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj",
-        ],
-    )
-    model = get_peft_model(model, lora_cfg)
     model.print_trainable_parameters()
 
     examples = _load_sft_examples(Path(args.data))

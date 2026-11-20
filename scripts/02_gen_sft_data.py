@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.config import WorkerSpec, build_episode_worker_view, load_pool_config
 from src.executor import RecursiveOrchestrator
 from src.verifiers import verify_answer
-from src.workers import AnthropicWorkerBackend, SQLiteResponseCache, WorkerRouter
+from src.workers import AnthropicWorkerBackend, BaseWorkerBackend, SQLiteResponseCache, WorkerRouter
 
 
 TOPOLOGY_HINTS = [
@@ -59,15 +59,17 @@ async def synthesize_dataset(args: argparse.Namespace) -> None:
         description="Fast proxy",
         input_cost_per_mtok=0.10,
         output_cost_per_mtok=0.50,
+        max_tokens=8000,
+        effort="low",
     )
 
-    class _ProxyLocalBackend(AnthropicWorkerBackend):
+    class _ProxyLocalBackend(BaseWorkerBackend):
         async def generate(self, spec, messages, **kwargs):
             return await anthropic_backend.generate(haiku_proxy_spec, messages, **kwargs)
 
     router = WorkerRouter(
         anthropic_backend=anthropic_backend,
-        conductor_base_backend=_ProxyLocalBackend(max_concurrency=args.max_concurrency, cache=cache),
+        conductor_base_backend=_ProxyLocalBackend(),
     )
 
     teacher_spec = WorkerSpec(
@@ -78,8 +80,9 @@ async def synthesize_dataset(args: argparse.Namespace) -> None:
         description="SFT teacher",
         input_cost_per_mtok=2.00,
         output_cost_per_mtok=10.00,
-        max_tokens=768,
-        temperature=0.6,
+        max_tokens=6000,   # thinking tokens count toward the cap
+        temperature=0.6,   # > 0.25 => teacher plans are never served from cache
+        effort="medium",
     )
 
     orchestrator = RecursiveOrchestrator(
@@ -186,8 +189,10 @@ def main() -> None:
     parser.add_argument("--num_samples", type=int, default=300)
     parser.add_argument("--teacher_model", type=str, default="claude-sonnet-5-5")
     parser.add_argument("--teacher_fast_model", type=str, default="claude-haiku-5-5")
-    parser.add_argument("--allow_recursion", action="store_true", default=True)
-    parser.add_argument("--permute_ids", action="store_true", default=True)
+    parser.add_argument("--allow_recursion", action=argparse.BooleanOptionalAction, default=True)
+    # Default OFF: one canonical-ID warm start is shared by every GRPO run, so the RQ3
+    # permuted-vs-canonical comparison differs only in the RL stage.
+    parser.add_argument("--permute_ids", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--cost_aware", action="store_true", default=False)
     parser.add_argument("--keep_unverified", action="store_true", default=False)
     parser.add_argument("--max_concurrency", type=int, default=16)

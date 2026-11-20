@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,26 @@ def summarize_traces(
     return summary
 
 
+def accuracy_stats(flags: list[bool], task_types: list[str]) -> dict[str, Any]:
+    """Accuracy with a 95% normal-approximation CI half-width, overall and per task type."""
+
+    def _one(xs: list[bool]) -> dict[str, Any]:
+        n = len(xs)
+        acc = sum(xs) / max(n, 1)
+        return {
+            "accuracy": round(acc, 4),
+            "acc_ci95": round(1.96 * math.sqrt(acc * (1.0 - acc) / max(n, 1)), 4),
+            "n": n,
+        }
+
+    out = _one(flags)
+    out["by_task_type"] = {
+        t: _one([f for f, tt in zip(flags, task_types) if tt == t])
+        for t in sorted(set(task_types))
+    }
+    return out
+
+
 def plot_topology_evolution(
     metrics_jsonl: str | Path,
     output_path: str | Path,
@@ -77,7 +98,7 @@ def plot_topology_evolution(
     rec = [r.get("recursion_rate", 0.0) * 100.0 for r in rows]
     cost = [r.get("avg_cost_usd", 0.0) * 1000.0 for r in rows]  # in millidollars
 
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.2), dpi=160)
+    fig, axes = plt.subplots(1, 4, figsize=(19, 4.2), dpi=160)
 
     axes[0].plot(steps, acc, marker="o", linewidth=2, label="Accuracy (%)")
     axes[0].plot(steps, fmt, linestyle="--", linewidth=1.6, label="Valid DAG (%)")
@@ -102,7 +123,73 @@ def plot_topology_evolution(
     axes[2].set_ylabel("Avg Cost ($ / 1k queries)")
     axes[2].grid(alpha=0.25)
 
+    worker_names = sorted({w for r in rows for w in r.get("worker_usage_share", {})})
+    for w in worker_names:
+        axes[3].plot(
+            steps,
+            [r.get("worker_usage_share", {}).get(w, 0.0) * 100.0 for r in rows],
+            linewidth=1.8,
+            label=w,
+        )
+    axes[3].set_title("Worker Call Share")
+    axes[3].set_xlabel("GRPO Step")
+    axes[3].set_ylabel("Share of Worker Calls (%)")
+    axes[3].grid(alpha=0.25)
+    if worker_names:
+        axes[3].legend(fontsize=8)
+
+    fig.suptitle("Training-rollout statistics (sampled at train temperature, train tasks)", fontsize=9)
     fig.tight_layout()
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
+def plot_grouped_accuracy(
+    groups: dict[str, dict[str, dict[str, Any]]],
+    title: str,
+    output_path: str | Path,
+) -> Path:
+    """Grouped bars with 95% CI. `groups[series][x_label] = {"accuracy", "acc_ci95", ...}`.
+
+    Used for RQ2 (series = training variant, x = task type) and RQ3 (series = training
+    variant, x = test-time pool condition). Missing cells are simply not drawn.
+    """
+    import matplotlib.pyplot as plt
+
+    series = list(groups.keys())
+    x_labels: list[str] = []
+    for cells in groups.values():
+        x_labels += [x for x in cells if x not in x_labels]
+
+    fig, ax = plt.subplots(figsize=(max(7.0, 1.6 * len(x_labels) + 3.0), 4.6), dpi=160)
+    width = 0.8 / max(len(series), 1)
+    for si, name in enumerate(series):
+        for xi, xl in enumerate(x_labels):
+            cell = groups[name].get(xl)
+            if cell is None:
+                continue
+            ax.bar(
+                xi + (si - (len(series) - 1) / 2) * width,
+                cell["accuracy"] * 100.0,
+                width,
+                yerr=cell.get("acc_ci95", 0.0) * 100.0,
+                capsize=3,
+                color=f"C{si}",
+                label=name if xi == 0 else None,
+            )
+    ax.set_xticks(range(len(x_labels)))
+    ax.set_xticklabels(x_labels)
+    ax.set_ylabel("Accuracy (%)")
+    ax.set_title(title)
+    ax.grid(axis="y", alpha=0.25)
+    handles, labels = ax.get_legend_handles_labels()
+    seen = dict(zip(labels, handles))
+    ax.legend(seen.values(), seen.keys(), fontsize=8)
+    fig.tight_layout()
+
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, bbox_inches="tight")
@@ -130,6 +217,22 @@ def plot_pareto_frontier(
         sy = [p["accuracy"] * 100.0 for p in singles]
         ax.scatter(sx, sy, s=90, marker="X", color="#64748b", label="Single Models", zorder=3)
         for p in singles:
+            ax.annotate(
+                p["label"],
+                (p["avg_cost_usd"] * 1000.0, p["accuracy"] * 100.0),
+                textcoords="offset points",
+                xytext=(6, 4),
+                fontsize=9,
+            )
+
+    statics = [p for p in points if p.get("group") == "static"]
+    if statics:
+        ax.scatter(
+            [p["avg_cost_usd"] * 1000.0 for p in statics],
+            [p["accuracy"] * 100.0 for p in statics],
+            s=90, marker="s", color="#d97706", label="Static Topologies", zorder=3,
+        )
+        for p in statics:
             ax.annotate(
                 p["label"],
                 (p["avg_cost_usd"] * 1000.0, p["accuracy"] * 100.0),
