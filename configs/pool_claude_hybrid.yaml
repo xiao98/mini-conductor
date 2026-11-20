@@ -1,0 +1,78 @@
+# Pool A: Hybrid Local + Claude API Worker Pool (Primary Experiment Pool)
+# Matches Sakana Fugu's real-world cost/capability heterogeneity while reserving
+# Claude Opus as a zero-shot held-out worker for RQ3 generalization evaluation.
+
+name: claude_hybrid
+reference_cost_usd: 0.015  # Approximate cost of a single Sonnet call for normalizing C(tau)
+max_steps: 5
+max_depth: 2               # Allows 1 level of recursive self-replanning (depth 0 -> depth 1)
+
+workers:
+  - id: 0
+    name: local-qwen-7b
+    backend: local_conductor_base
+    model_name: Qwen/Qwen2.5-7B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (0x)"
+    max_tokens: 1024
+    temperature: 0.2
+    description: >-
+      Fast, free local 7B model. Best for straightforward arithmetic, quick formatting,
+      drafting simple outlines, or acting as a cheap sanity check on easy problems.
+
+  - id: 1
+    name: claude-haiku
+    backend: anthropic
+    model_name: claude-haiku-5-5
+    input_cost_per_mtok: 0.10
+    output_cost_per_mtok: 0.50
+    cost_tier: "low (0.05x)"
+    max_tokens: 1536
+    temperature: 0.2
+    description: >-
+      Fast, very low-cost cloud model. Strong at clean Python coding, structured problem
+      decomposition, independent solution attempts, and rapid step-by-step verification.
+
+  - id: 2
+    name: claude-sonnet
+    backend: anthropic
+    model_name: claude-sonnet-5-5
+    input_cost_per_mtok: 2.00
+    output_cost_per_mtok: 10.00
+    cost_tier: "medium (1x)"
+    max_tokens: 2048
+    temperature: 0.2
+    description: >-
+      High-capability reasoning and coding specialist. Excels at competition math proofs,
+      tricky algorithmic code, graduate-level science, and resolving subtle logical errors.
+
+  - id: 3
+    name: self
+    backend: conductor_self
+    model_name: self
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "recursive orchestrator"
+    max_tokens: 1024
+    temperature: 0.6
+    description: >-
+      Recursive call to the Conductor itself. Assign this when previous workers might
+      disagree or fail on a hard problem so you can inspect their real outputs and
+      dynamically design a follow-up verification or refinement sub-plan.
+
+# Held-out workers excluded during RL training and injected zero-shot during RQ3 evaluation.
+held_out_workers:
+  - id: 4
+    name: claude-opus
+    backend: anthropic
+    model_name: claude-opus-5-5
+    input_cost_per_mtok: 4.00
+    output_cost_per_mtok: 20.00
+    cost_tier: "high (2x)"
+    max_tokens: 2048
+    temperature: 0.2
+    description: >-
+      Frontier deep-reasoning model (strongest overall intelligence, highest cost).
+      Ideal as an authoritative final verifier or solver on the hardest AIME, GPQA,
+      or algorithmic edge cases where other workers struggle or disagree.

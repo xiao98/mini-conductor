@@ -1,0 +1,62 @@
+# Pool B: 100% Open-Source Local Specialist Pool (Zero API Cost on Single H100 80GB)
+# Total VRAM footprint in bf16: ~14GB (Math-7B) + ~14GB (Coder-7B) + ~22GB (Conductor 7B + LoRA) ~ 50GB.
+
+name: open_specialists
+reference_cost_usd: 0.001
+max_steps: 5
+max_depth: 2
+
+workers:
+  - id: 0
+    name: qwen-math-7b
+    backend: local_hf
+    model_name: Qwen/Qwen2.5-Math-7B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (local specialist)"
+    max_tokens: 1536
+    temperature: 0.2
+    description: >-
+      Specialized mathematical reasoning model. Strong at algebra, number theory,
+      combinatorics, symbolic derivation, and mathematical proof verification. Weak at software engineering.
+
+  - id: 1
+    name: qwen-coder-7b
+    backend: local_hf
+    model_name: Qwen/Qwen2.5-Coder-7B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (local specialist)"
+    max_tokens: 1536
+    temperature: 0.2
+    description: >-
+      Specialized programming model. Excels at writing clean Python algorithms, debugging
+      edge cases, writing verification scripts, and solving competitive programming tasks.
+
+  - id: 2
+    name: qwen-general-7b
+    backend: local_conductor_base
+    model_name: Qwen/Qwen2.5-7B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (local generalist)"
+    max_tokens: 1536
+    temperature: 0.2
+    description: >-
+      Balanced general-purpose model. Useful for scientific reading comprehension,
+      synthesizing multiple candidate answers, and formatting final outputs cleanly.
+
+  - id: 3
+    name: self
+    backend: conductor_self
+    model_name: self
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "recursive orchestrator"
+    max_tokens: 1024
+    temperature: 0.6
+    description: >-
+      Recursive call to the Conductor itself to inspect intermediate worker responses
+      and adaptively plan follow-up refinement or cross-checking steps.
+
+held_out_workers: []
