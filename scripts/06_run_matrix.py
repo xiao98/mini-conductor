@@ -60,6 +60,7 @@ def train_cmd(name: str, args: argparse.Namespace) -> list[str]:
         "--total_steps", str(args.total_steps), "--batch_size", str(args.batch_size),
         "--group_size", str(args.group_size), "--save_every", str(args.save_every),
         "--seed", str(args.seed), "--resume", "--max_new_tokens", str(args.max_new_tokens),
+        "--gen_batch_size", str(args.gen_batch_size),
         "--credit_mode", spec["credit_mode"], "--cost_lambda", str(spec["cost_lambda"]),
     ]
     if spec["allow_recursion"]:
@@ -75,7 +76,7 @@ def eval_cmd(name: str | None, args: argparse.Namespace) -> list[str]:
         sys.executable, str(ROOT / "scripts" / "05_eval_suite.py"),
         "--model", args.model, "--pool", args.pool, "--eval_data", args.eval_data,
         "--limit", str(args.eval_limit), "--seed", str(args.eval_seed),
-        "--max_new_tokens", str(args.max_new_tokens),
+        "--max_new_tokens", str(args.max_new_tokens), "--gen_batch_size", str(args.gen_batch_size),
         "--cache_db", str(Path(args.root) / "worker_cache.sqlite"),
         "--output_dir", str(Path(args.root) / "eval" / (name or "baselines")),
     ]
@@ -171,6 +172,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--save_every", type=int, default=20)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--max_new_tokens", type=int, default=768)
+    ap.add_argument("--gen_batch_size", type=int, default=16, help="Max prompts per GPU generate() call")
     ap.add_argument("--eval_limit", type=int, default=150)
     ap.add_argument("--eval_seed", type=int, default=123)
     ap.add_argument("--skip_baselines", action="store_true")

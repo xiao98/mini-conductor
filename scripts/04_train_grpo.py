@@ -16,6 +16,7 @@ from pathlib import Path
 import random
 import shutil
 import sys
+import time
 from typing import Any
 
 import torch
@@ -183,9 +184,15 @@ async def train_loop(args: argparse.Namespace) -> None:
         ]
 
         # 1. Sample + execute all B * G orchestration DAGs concurrently
+        t_step = time.perf_counter()
+        n_batches = len(generator.batch_sizes)
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
         group_results = await asyncio.gather(
             *(_rollout_group(t, v) for t, v in zip(batch, views))
         )
+        t_rollout = time.perf_counter() - t_step
+        step_batches = generator.batch_sizes[n_batches:]
 
         # 2. GRPO policy-gradient update
         opt_stats = trainer.update_from_groups(
@@ -197,7 +204,14 @@ async def train_loop(args: argparse.Namespace) -> None:
         all_correct = [c for _, flags, _ in group_results for c in flags]
         all_rewards = [r for _, _, rewards in group_results for r in rewards]
         topo_stats = summarize_traces(all_traces, all_correct, all_rewards)
-        log_row = {"step": step, **topo_stats, **opt_stats}
+        timing = {
+            "rollout_s": round(t_rollout, 1),
+            "update_s": round(time.perf_counter() - t_step - t_rollout, 1),
+            "gen_calls": len(step_batches),
+            "gen_mean_batch": round(sum(step_batches) / max(len(step_batches), 1), 1),
+            "peak_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 1) if torch.cuda.is_available() else 0.0,
+        }
+        log_row = {"step": step, **topo_stats, **opt_stats, **timing}
         if router.anthropic_backend is not None:
             log_row["api_stop_reasons"] = dict(router.anthropic_backend.stop_reasons)
         with open(metrics_path, "a", encoding="utf-8") as f:
@@ -212,7 +226,9 @@ async def train_loop(args: argparse.Namespace) -> None:
             f"rec={topo_stats['recursion_rate']*100:.1f}% "
             f"cost=${topo_stats['avg_cost_usd']:.4f} "
             f"loss={opt_stats['loss']:.4f} kl={opt_stats['kl']:.4f} "
-            f"turns={int(opt_stats['num_turns_updated'])}",
+            f"turns={int(opt_stats['num_turns_updated'])} "
+            f"| rollout={timing['rollout_s']:.0f}s update={timing['update_s']:.0f}s "
+            f"gen={timing['gen_calls']}x{timing['gen_mean_batch']:.1f} mem={timing['peak_mem_gb']:.1f}GB",
             flush=True,
         )
 
