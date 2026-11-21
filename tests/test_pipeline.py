@@ -115,6 +115,11 @@ def test_anthropic_retries_only_retryable_errors(no_sleep):
     assert asyncio.run(backend.generate(SONNET, MSGS)).text == "ok"
     assert len(fake.calls) == 3
 
+    # A 503 from a gateway is retried whatever exception class the SDK maps it to.
+    fake_503 = _FakeMessages([_api_error(anthropic.APIStatusError, 503), _fake_msg("ok")])
+    backend_503 = AnthropicWorkerBackend(client=SimpleNamespace(messages=fake_503))
+    assert asyncio.run(backend_503.generate(SONNET, MSGS)).text == "ok" and len(fake_503.calls) == 2
+
     # A 400 (e.g. wrong model ID / invalid parameter) must fail immediately, not burn retries.
     fake_bad = _FakeMessages([_api_error(anthropic.BadRequestError, 400), _fake_msg()])
     backend_bad = AnthropicWorkerBackend(client=SimpleNamespace(messages=fake_bad))

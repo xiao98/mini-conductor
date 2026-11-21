@@ -171,7 +171,7 @@ async def run_eval(args: argparse.Namespace) -> None:
     generator, hf = build_generator(model, tokenizer, max_batch=args.gen_batch_size)
     cache = SQLiteResponseCache(args.cache_db or (out_dir / "eval_cache.sqlite"))
     router = build_router(
-        pool_cfg, generator=generator, hf=hf, cache=cache, max_api_concurrency=args.max_concurrency
+        pool_cfg, generator=generator, hf=hf, cache=cache, max_api_concurrency=args.max_api_concurrency
     )
     conductor_fn = make_conductor_fn(generator, temperature=0.0, max_new_tokens=args.max_new_tokens)
 
@@ -247,6 +247,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max_new_tokens", type=int, default=768)
     parser.add_argument("--gen_batch_size", type=int, default=16)
     parser.add_argument("--max_concurrency", type=int, default=16)
+    parser.add_argument("--max_api_concurrency", type=int, default=4,
+                        help="In-flight Claude requests; keep low behind a shared gateway")
     parser.add_argument("--cache_db", type=str, default="", help="Default: <output_dir>/eval_cache.sqlite")
     parser.add_argument("--seed", type=int, default=123)
     return parser

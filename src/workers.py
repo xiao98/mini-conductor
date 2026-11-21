@@ -142,7 +142,7 @@ class AnthropicWorkerBackend(BaseWorkerBackend):
         *,
         api_key: str | None = None,
         max_concurrency: int = 16,
-        max_retries: int = 6,
+        max_retries: int = 8,
         cache: SQLiteResponseCache | None = None,
         client: Any = None,
     ) -> None:
@@ -190,20 +190,19 @@ class AnthropicWorkerBackend(BaseWorkerBackend):
         if spec.effort:
             kwargs["output_config"] = {"effort": spec.effort}
 
-        retryable = (
-            anthropic.RateLimitError,
-            anthropic.InternalServerError,  # all 5xx, including 529 overloaded
-            anthropic.APIConnectionError,   # includes timeouts
-        )
         t0 = time.perf_counter()
         for attempt in range(self._max_retries):
             try:
                 async with self._sem:
                     msg = await self._client.messages.create(**kwargs)
                 break
-            except retryable:
-                # 4xx (bad model ID, auth, invalid params) are NOT retried: they propagate at once.
-                if attempt == self._max_retries - 1:
+            except (anthropic.APIStatusError, anthropic.APIConnectionError) as exc:
+                # Retry 429, every 5xx (by status code: SDK versions disagree on which exception
+                # class a 503/529 maps to) and connection errors / timeouts. Other 4xx (bad model
+                # ID, auth, billing, invalid params) propagate at once.
+                status = getattr(exc, "status_code", None)
+                retryable = status is None or status == 429 or status >= 500
+                if not retryable or attempt == self._max_retries - 1:
                     raise
                 await asyncio.sleep(min(60.0, 2.0**attempt) + random.uniform(0.0, 1.0))
 
