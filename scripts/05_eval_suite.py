@@ -235,7 +235,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-7B-Instruct")
     parser.add_argument("--adapter", type=str, default="")
     parser.add_argument("--label", type=str, default="")
-    parser.add_argument("--pool", type=str, default="configs/pool_claude_hybrid.yaml")
+    parser.add_argument("--pool", type=str, default="configs/pool_local_weak.yaml")
     parser.add_argument("--eval_data", type=str, default="data/eval_all.jsonl")
     parser.add_argument("--output_dir", type=str, default="results/rq_eval")
     parser.add_argument("--limit", type=int, default=150, help="Stratified across task types; 0 = all")

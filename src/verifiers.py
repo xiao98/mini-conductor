@@ -42,10 +42,16 @@ def _normalize_latex_expr(expr: str) -> str:
     s = s.replace("\\!", "").replace("\\,", "").replace("\\;", "").replace("\\ ", "")
     s = s.replace("\\dfrac", "\\frac").replace("\\tfrac", "\\frac")
     s = s.replace("\\%", "%").replace("\\cdot", "*").replace("\\times", "*")
-    s = re.sub(r"\\text\{([^}]*)\}", r"\1", s)
+    # `5.4 \text{ cents}` -> `5.4` (unit dropped); a pure-text answer like `\text{east}` is kept.
+    without_text = re.sub(r"\\text\{[^}]*\}", "", s)
+    s = without_text if without_text.strip() else re.sub(r"\\text\{([^}]*)\}", r"\1", s)
     s = re.sub(r"\\mathrm\{([^}]*)\}", r"\1", s)
-    s = s.strip().rstrip(".")
-    return s
+    s = re.sub(r"\^\{?\\circ\}?", "", s).replace("\\degree", "")   # 120^\circ -> 120
+    s = re.sub(r"\\frac(\d)(\d)", r"\\frac{\1}{\2}", s)             # \frac43 -> \frac{4}{3}
+    s = re.sub(r"\s+", "", s)                                        # (15, -29) == (15,-29)
+    if re.fullmatch(r"-?\d{1,3}(,\d{3})+(\.\d+)?", s):               # 58,500 -> 58500
+        s = s.replace(",", "")
+    return s.rstrip(".")
 
 
 def _latex_to_sympy_str(s: str) -> str:

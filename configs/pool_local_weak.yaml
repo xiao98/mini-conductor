@@ -1,0 +1,68 @@
+# Default pool for the main question: two local open models are trained on (zero API calls during
+# RL), and a much stronger Claude Haiku is held out and injected zero-shot at evaluation time.
+#
+# Measured direct accuracy on the 150-task eval subset (see README "Gate results"):
+#   qwen-1.5b 51%  <  qwen-7b 74%  <  claude-haiku 93%
+# VRAM in bf16: ~15GB (Conductor 7B, shared with the qwen-7b worker) + ~3GB (1.5B) + training activations.
+
+name: local_weak
+reference_cost_usd: 0.002  # Roughly one Haiku call; only matters when cost_lambda > 0
+max_steps: 5
+max_depth: 2
+
+workers:
+  - id: 0
+    name: qwen-1.5b
+    backend: local_hf
+    model_name: Qwen/Qwen2.5-1.5B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (0x)"
+    max_tokens: 1536
+    temperature: 0.2
+    description: >-
+      Very small local 1.5B model. Fast, but frequently wrong on multi-step math, non-trivial
+      code and science questions. Only suitable for trivial steps or simple reformatting.
+
+  - id: 1
+    name: qwen-7b
+    backend: local_conductor_base
+    model_name: Qwen/Qwen2.5-7B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (0x)"
+    max_tokens: 1536
+    temperature: 0.2
+    description: >-
+      Mid-size local 7B model. Reasonably reliable on routine Python tasks and standard
+      textbook problems, but makes mistakes on harder multi-step math and science reasoning.
+
+  - id: 2
+    name: self
+    backend: conductor_self
+    model_name: self
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "recursive orchestrator"
+    max_tokens: 1024
+    temperature: 0.6
+    description: >-
+      Recursive call to the Conductor itself. Assign this when previous workers might
+      disagree or fail on a hard problem so you can inspect their real outputs and
+      dynamically design a follow-up verification or refinement sub-plan.
+
+# Never shown during SFT or RL; injected only by the `+heldout` evaluation conditions.
+held_out_workers:
+  - id: 3
+    name: claude-haiku
+    backend: anthropic
+    model_name: claude-haiku-5-5
+    input_cost_per_mtok: 0.10
+    output_cost_per_mtok: 0.50
+    cost_tier: "low (paid API)"
+    max_tokens: 8000          # thinking tokens count toward this cap
+    effort: low
+    temperature: 0.2
+    description: >-
+      Strong cloud model, substantially more accurate than the local models on competition
+      math, tricky code and graduate-level science. Costs a small amount per call.

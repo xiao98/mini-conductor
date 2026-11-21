@@ -14,7 +14,10 @@ import argparse
 import json
 from pathlib import Path
 import random
+import sys
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 DEMO_EXAMPLES: list[dict[str, Any]] = [

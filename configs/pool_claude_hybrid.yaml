@@ -1,6 +1,6 @@
 # Pool A: Hybrid Local + Claude API Worker Pool (Primary Experiment Pool)
-# Matches Sakana Fugu's real-world cost/capability heterogeneity while reserving
-# Claude Opus as a zero-shot held-out worker for RQ3 generalization evaluation.
+# Three workers of very different cost/capability; Claude Opus is held out of training
+# and injected zero-shot at evaluation time.
 
 name: claude_hybrid
 reference_cost_usd: 0.015  # Approximate cost of a single Sonnet call for normalizing C(tau)

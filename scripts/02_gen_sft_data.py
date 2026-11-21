@@ -49,8 +49,9 @@ async def synthesize_dataset(args: argparse.Namespace) -> None:
         max_concurrency=args.max_concurrency,
         cache=cache,
     )
-    # During SFT synthesis we use a cheap Claude Haiku proxy for any local_conductor_base worker
-    # so this script can even run on CPU before renting an H100!
+    # During SFT synthesis every local worker (local_conductor_base / local_hf) is stood in for by
+    # a cheap Claude Haiku proxy, so this script can even run on CPU before renting an H100!
+    # Only the teacher's plans are saved; the proxy just decides which plans pass verification.
     haiku_proxy_spec = WorkerSpec(
         id=99,
         name="haiku-proxy",
@@ -70,6 +71,9 @@ async def synthesize_dataset(args: argparse.Namespace) -> None:
     router = WorkerRouter(
         anthropic_backend=anthropic_backend,
         conductor_base_backend=_ProxyLocalBackend(),
+        local_hf_backends={
+            w.model_name: _ProxyLocalBackend() for w in pool_cfg.workers if w.backend == "local_hf"
+        },
     )
 
     teacher_spec = WorkerSpec(
@@ -183,7 +187,7 @@ async def synthesize_dataset(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Synthesize verified SFT warmup trajectories.")
-    parser.add_argument("--pool", type=str, default="configs/pool_claude_hybrid.yaml")
+    parser.add_argument("--pool", type=str, default="configs/pool_local_weak.yaml")
     parser.add_argument("--dataset", type=str, default="data/train.jsonl")
     parser.add_argument("--output", type=str, default="data/sft_warmup.jsonl")
     parser.add_argument("--num_samples", type=int, default=300)

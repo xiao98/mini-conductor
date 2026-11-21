@@ -238,7 +238,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Single-GPU GRPO training for mini-conductor.")
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-7B-Instruct")
     parser.add_argument("--init_adapter", type=str, default="")
-    parser.add_argument("--pool", type=str, default="configs/pool_claude_hybrid.yaml")
+    parser.add_argument("--pool", type=str, default="configs/pool_local_weak.yaml")
     parser.add_argument("--train_data", type=str, default="data/train.jsonl")
     parser.add_argument("--save_dir", type=str, default="checkpoints/grpo_run")
     parser.add_argument("--resume", action="store_true")

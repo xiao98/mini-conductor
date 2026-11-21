@@ -430,3 +430,29 @@ def test_matrix_figures_never_invent_missing_runs(tmp_path):
     made = {p.name for p in mx.make_figures(tmp_path)}
     assert made == {"rq2_credit_assignment.png", "rq3_worker_transfer.png", "rq4_pareto_frontier.png"}
     assert set(json.loads((tmp_path / "figures" / "all_results.json").read_text())) == {"baselines", "base"}
+
+
+def test_math_verifier_accepts_equivalent_surface_forms():
+    """Pairs observed as false negatives in a real baseline run (MATH-500, Claude workers)."""
+    from src.verifiers import verify_math
+
+    for pred, gt in [
+        (r"(3, \frac{\pi}{2})", r"\left( 3, \frac{\pi}{2} \right)"),
+        (r"\frac{4}{3}", r"\frac43"),
+        ("58500", "58,500"),
+        ("5.4", r"5.4 \text{ cents}"),
+        ("120", r"120^\circ"),
+        ("(15, -29)", "(15,-29)"),
+    ]:
+        assert verify_math(rf"So the answer is \boxed{{{pred}}}.", gt)[0], (pred, gt)
+    for pred, gt in [("58501", "58,500"), (r"\frac{3}{4}", r"\frac43"), ("(15, 29)", "(15,-29)"), (r"\text{west}", r"\text{east}")]:
+        assert not verify_math(rf"\boxed{{{pred}}}", gt)[0], (pred, gt)
+
+
+def test_default_pool_trains_on_local_workers_only():
+    pool = load_pool_config(ROOT / "configs" / "pool_local_weak.yaml")
+    train = pool.active_workers(include_held_out=False, allow_recursion=False)
+    assert {w.backend for w in train} == {"local_hf", "local_conductor_base"}  # RL makes no API calls
+    assert [w.name for w in pool.held_out_workers] == ["claude-haiku"]
+    ids = [w.id for w in pool.active_workers(include_held_out=True)]
+    assert ids == list(range(len(ids)))

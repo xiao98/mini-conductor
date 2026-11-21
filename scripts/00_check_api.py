@@ -3,7 +3,7 @@
 Goes through the real `AnthropicWorkerBackend` code path (no cache), so a pass here means the
 exact request shape used in training is accepted for this account. Exits non-zero on failure.
 
-    python scripts/00_check_api.py --pool configs/pool_claude_hybrid.yaml
+    python scripts/00_check_api.py --pool configs/pool_local_weak.yaml
 """
 
 from __future__ import annotations
@@ -56,5 +56,5 @@ async def main(pool_path: str) -> int:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pool", default="configs/pool_claude_hybrid.yaml")
+    ap.add_argument("--pool", default="configs/pool_local_weak.yaml")
     sys.exit(asyncio.run(main(ap.parse_args().pool)))

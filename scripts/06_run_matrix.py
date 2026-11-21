@@ -161,7 +161,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--root", required=True, help="Experiment root (Google Drive on Colab)")
     ap.add_argument("--only", default="", help="Comma-separated subset of: " + ",".join(RUNS))
     ap.add_argument("--model", default="Qwen/Qwen2.5-7B-Instruct")
-    ap.add_argument("--pool", default="configs/pool_claude_hybrid.yaml")
+    ap.add_argument("--pool", default="configs/pool_local_weak.yaml")
     ap.add_argument("--train_data", default="data/train.jsonl")
     ap.add_argument("--eval_data", default="data/eval_all.jsonl")
     ap.add_argument("--init_adapter", default="checkpoints/sft_warmup")
