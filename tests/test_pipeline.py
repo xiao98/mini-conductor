@@ -461,3 +461,15 @@ def test_default_pool_trains_on_local_workers_only():
     assert [w.name for w in pool.held_out_workers] == ["claude-haiku"]
     ids = [w.id for w in pool.active_workers(include_held_out=True)]
     assert ids == list(range(len(ids)))
+
+
+def test_token_budget_chunks_bound_rows_times_longest():
+    from src.workers import token_budget_chunks
+
+    lengths = [100, 5000, 120, 90, 3000, 7000]
+    chunks = token_budget_chunks(lengths, 6000)
+    assert sorted(i for c in chunks for i in c) == list(range(len(lengths)))  # every row exactly once
+    for c in chunks:
+        assert len(c) == 1 or len(c) * max(lengths[i] for i in c) <= 6000
+    assert [5] in chunks  # a row above the budget runs alone
+    assert token_budget_chunks([10] * 8, 10_000) == [list(range(8))]  # short rows stay in one batch

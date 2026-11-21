@@ -281,8 +281,12 @@ class HFBatchGenerate:
     `model.disable_adapter()` -- the free local worker costs ZERO extra VRAM.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_batch_tokens: int = 48_000) -> None:
         self.models: dict[str, tuple[Any, Any]] = {}
+        # Prompt-side memory grows with (rows x padded length), not with rows: a few long
+        # prompts (recursive turns, steps that read several prior outputs) OOM a 40GB card
+        # at batch sizes that are fine for short ones. Cap rows x padded length per forward.
+        self.max_batch_tokens = max_batch_tokens
 
     def add(self, model_key: str, model: Any, tokenizer: Any) -> None:
         tokenizer.padding_side = "left"  # required for batched decoder-only generation
@@ -291,14 +295,28 @@ class HFBatchGenerate:
     def __call__(
         self, batch_messages: list[list[dict[str, str]]], key: tuple
     ) -> list[tuple[str, int, int]]:
-        import torch
-
         model_key, use_adapter, temperature, max_new_tokens = key
         model, tok = self.models[model_key]
         prompts = [
             tok.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
             for m in batch_messages
         ]
+        lengths = [len(tok.encode(p, add_special_tokens=False)) for p in prompts]
+        results: list[tuple[str, int, int] | None] = [None] * len(prompts)
+        for chunk in token_budget_chunks(lengths, self.max_batch_tokens):
+            outs = self._generate(
+                model, tok, [prompts[i] for i in chunk], use_adapter, temperature, max_new_tokens
+            )
+            for i, out in zip(chunk, outs):
+                results[i] = out
+        return results  # type: ignore[return-value]
+
+    @staticmethod
+    def _generate(
+        model: Any, tok: Any, prompts: list[str], use_adapter: bool, temperature: float, max_new_tokens: int
+    ) -> list[tuple[str, int, int]]:
+        import torch
+
         # add_special_tokens=False: the chat template already has them, and GRPO re-scores the
         # same prompt with add_special_tokens=False (sampling and scoring contexts must match).
         inputs = tok(prompts, return_tensors="pt", padding=True, add_special_tokens=False).to(model.device)
@@ -331,6 +349,20 @@ class HFBatchGenerate:
             in_tok = int(inputs["attention_mask"][i].sum())
             results.append((text, in_tok, len(tok.encode(text, add_special_tokens=False))))
         return results
+
+
+def token_budget_chunks(lengths: list[int], max_tokens: int) -> list[list[int]]:
+    """Split row indices into length-sorted chunks with `rows x longest_row <= max_tokens`.
+
+    A single row longer than the budget still gets its own chunk.
+    """
+    chunks: list[list[int]] = []
+    for i in sorted(range(len(lengths)), key=lambda j: lengths[j]):  # ascending: i is the longest so far
+        if chunks and (len(chunks[-1]) + 1) * lengths[i] <= max_tokens:
+            chunks[-1].append(i)
+        else:
+            chunks.append([i])
+    return chunks
 
 
 class LocalHFWorkerBackend(BaseWorkerBackend):
