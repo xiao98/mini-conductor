@@ -1,0 +1,126 @@
+{
+  "pool": "local_weak",
+  "label": "base-model",
+  "adapter": "",
+  "num_eval_tasks": 150,
+  "results": [
+    {
+      "label": "qwen-1.5b",
+      "group": "single_model",
+      "condition": "direct",
+      "accuracy": 0.5467,
+      "acc_ci95": 0.0797,
+      "n": 150,
+      "by_task_type": {
+        "code": {
+          "accuracy": 0.5,
+          "acc_ci95": 0.1386,
+          "n": 50
+        },
+        "gpqa": {
+          "accuracy": 0.56,
+          "acc_ci95": 0.1376,
+          "n": 50
+        },
+        "math": {
+          "accuracy": 0.58,
+          "acc_ci95": 0.1368,
+          "n": 50
+        }
+      },
+      "avg_cost_usd": 0.0
+    },
+    {
+      "label": "qwen-7b",
+      "group": "single_model",
+      "condition": "direct",
+      "accuracy": 0.76,
+      "acc_ci95": 0.0683,
+      "n": 150,
+      "by_task_type": {
+        "code": {
+          "accuracy": 0.8,
+          "acc_ci95": 0.1109,
+          "n": 50
+        },
+        "gpqa": {
+          "accuracy": 0.72,
+          "acc_ci95": 0.1245,
+          "n": 50
+        },
+        "math": {
+          "accuracy": 0.76,
+          "acc_ci95": 0.1184,
+          "n": 50
+        }
+      },
+      "avg_cost_usd": 0.0
+    },
+    {
+      "label": "claude-haiku",
+      "group": "single_model",
+      "condition": "direct",
+      "accuracy": 0.9733,
+      "acc_ci95": 0.0258,
+      "n": 150,
+      "by_task_type": {
+        "code": {
+          "accuracy": 0.98,
+          "acc_ci95": 0.0388,
+          "n": 50
+        },
+        "gpqa": {
+          "accuracy": 0.94,
+          "acc_ci95": 0.0658,
+          "n": 50
+        },
+        "math": {
+          "accuracy": 1.0,
+          "acc_ci95": 0.0,
+          "n": 50
+        }
+      },
+      "avg_cost_usd": 0.000268
+    },
+    {
+      "num_episodes": 150,
+      "format_rate": 1.0,
+      "accuracy": 0.6867,
+      "avg_cost_usd": 0.0,
+      "avg_top_steps": 3.0,
+      "avg_num_layers": 2.0,
+      "avg_parallel_width": 2.0,
+      "recursion_rate": 0.0,
+      "avg_max_depth": 0.0,
+      "worker_usage_share": {
+        "qwen-7b": 0.6667,
+        "qwen-1.5b": 0.3333
+      },
+      "acc_ci95": 0.0742,
+      "n": 150,
+      "by_task_type": {
+        "code": {
+          "accuracy": 0.72,
+          "acc_ci95": 0.1245,
+          "n": 50
+        },
+        "gpqa": {
+          "accuracy": 0.64,
+          "acc_ci95": 0.133,
+          "n": 50
+        },
+        "math": {
+          "accuracy": 0.7,
+          "acc_ci95": 0.127,
+          "n": 50
+        }
+      },
+      "label": "static parallel+judge",
+      "group": "static",
+      "condition": "canonical"
+    }
+  ],
+  "api_stop_reasons": {
+    "end_turn": 73
+  }
+}

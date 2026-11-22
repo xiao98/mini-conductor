@@ -89,14 +89,60 @@ The 8-rollout groups in particular give a much noisier advantage estimate than t
 
 ---
 
+## Results so far: the warm-started Conductor, before any RL
+
+One evaluation run, 150 tasks, one seed, greedy Conductor. The Conductor is Qwen2.5-7B + LoRA
+after the SFT warm start only (185 Haiku-written plans, canonical IDs, Haiku never in the pool).
+Raw outputs: [`experiments/sft_only_2026-11-21/`](experiments/sft_only_2026-11-21).
+
+| Test-time pool | Accuracy | Valid plans | Worker calls: 7B / 1.5B / `self` / Haiku |
+| :-- | :-- | :-- | :-- |
+| `canonical` | 69.3% +-7.4 | 94.0% | 87% / 0% / 13% / - |
+| `permuted_ids` | 64.7% +-7.6 | 91.3% | 86% / 3% / 11% / - |
+| `+heldout` | 69.3% +-7.4 | 90.0% | 79% / 0.4% / 13% / 8% |
+| `+heldout+perm` | 65.3% +-7.6 | 86.7% | 69% / 4% / 11% / 16% |
+
+For reference on the same tasks: Qwen-7B alone 76.0%, static parallel+judge 68.7%, Haiku alone 97.3%.
+
+**1. Orchestration does not pay yet.** The Conductor never beats its own best worker answering
+directly. It reliably avoids the 1.5B, but 6-13% of its plans are invalid (scored wrong), 33-44% of
+episodes recurse, and multi-step plans show no consistent accuracy gain over single-step ones.
+
+**2. A much stronger unseen worker is mostly ignored.** With Haiku available under a new ID,
+it appears in the top-level plan of 8 of 150 episodes (all 8 correct) and accuracy does not move.
+
+**3. Known workers are found by identity, the unseen one by slot.** Share of episodes whose
+top-level plan calls a worker, split by the ID that worker was assigned in that episode
+(`+heldout+perm`; training IDs were 0 = 1.5B, 1 = 7B, 2 = `self`):
+
+| Worker holds ID | 0 | 1 | 2 | 3 |
+| :-- | :-- | :-- | :-- | :-- |
+| Qwen-7B (seen) | 41/49 | 45/45 | 26/29 | 23/27 |
+| Claude Haiku (unseen) | 4/39 | 14/40 | 17/34 | 7/37 |
+| Qwen-1.5B (seen, weak) | 1/34 | 5/33 | 4/41 | 0/42 |
+
+The 7B is called 84-100% of the time wherever it sits, although it was only ever seen at ID 1.
+Haiku is called 35-50% of the time when it lands on an ID that was *used* in training (1 or 2)
+and 10-19% otherwise. In `permuted_ids` the 1.5B is called only when it holds ID 1 (6/44, else 0/106).
+
+Limits: 27-57 episodes per cell, so only the large gaps are meaningful; name and description are
+always shown together, so "identity" cannot be split further; the slot table counts top-level
+plan steps only, while the worker-call shares above also count calls inside recursive sub-plans;
+this is the warm-started policy, and RL may change all of it.
+
+---
+
 ## Status
 
-**No trained-Conductor results exist yet.** The only measurements so far are the gate numbers
-above (single workers answering directly). Every figure and number must come from a real run of
-`scripts/06_run_matrix.py`; the aggregator only draws runs whose output files exist. What has
-been verified so far: unit tests (`pytest -v`), the real HuggingFace dataset build, and a CPU
-plumbing smoke test (`scripts/smoke_cpu.py`: 135M toy model + mock workers through
-SFT -> GRPO -> resume -> eval -> figures). The smoke test proves the pipeline executes, nothing more.
+**No RL-trained Conductor results exist yet.** A GRPO pilot on an A100 completed 2 steps at
+about 20 minutes per step (8 tasks x 8 rollouts) before it was stopped, which makes the default
+160-step runs impractical on one GPU without further speed work; in its second step 4 of the 8
+task groups had identical rewards across all 8 rollouts and so carried no signal. Measured so far: the gate numbers and the
+SFT-only evaluation above. Every figure and number must come from a real run; the aggregator
+only draws runs whose output files exist. Also verified: unit tests (`pytest -v`), the real
+HuggingFace dataset build, and a CPU plumbing smoke test (`scripts/smoke_cpu.py`: 135M toy model
++ mock workers through SFT -> GRPO -> resume -> eval -> figures), which proves the pipeline
+executes, nothing more.
 
 ---
 
@@ -127,6 +173,7 @@ mini-conductor/
 │   ├── 04_train_grpo.py             # One GRPO run (resumable)
 │   ├── 05_eval_suite.py             # One adapter x test-time pool conditions (+ baselines)
 │   ├── 06_run_matrix.py             # ALL runs for RQ1-RQ4: train -> eval -> figures (resumable)
+│   ├── 07_slot_analysis.py          # Per-worker, per-ID-slot usage from an eval's details files
 │   └── smoke_cpu.py                 # CPU end-to-end plumbing check (no GPU / API key)
 ├── notebooks/colab_h100_quickstart.ipynb
 └── tests/                           # test_core.py, test_pipeline.py

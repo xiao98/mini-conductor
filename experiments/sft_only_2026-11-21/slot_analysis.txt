@@ -1,0 +1,17 @@
+Output of the slot analysis in `scripts/07_slot_analysis.py`, run on <root>/eval/sft_only at commit 3563aec.
+Counts are over TOP-LEVEL plan steps only: "used a/b" = worker called in a of the b episodes
+where it held that ID; "acc" = accuracy of those b episodes.
+
+== permuted_ids
+  qwen-1.5b     {0: 'used 0/54 acc 0.70', 1: 'used 6/44 acc 0.57', 2: 'used 0/52 acc 0.65'}
+  qwen-7b       {0: 'used 41/44 acc 0.66', 1: 'used 53/57 acc 0.68', 2: 'used 48/49 acc 0.59'}
+== plus_heldoutplus_perm
+  qwen-1.5b     {0: 'used 1/34 acc 0.68', 1: 'used 5/33 acc 0.61', 2: 'used 4/41 acc 0.61', 3: 'used 0/42 acc 0.71'}
+  qwen-7b       {0: 'used 41/49 acc 0.57', 1: 'used 45/45 acc 0.82', 2: 'used 26/29 acc 0.59', 3: 'used 23/27 acc 0.59'}
+  claude-haiku  {0: 'used 4/39 acc 0.67', 1: 'used 14/40 acc 0.62', 2: 'used 17/34 acc 0.62', 3: 'used 7/37 acc 0.70'}
+  episodes with haiku: 42 acc 0.714 | haiku as last step: 26 acc 0.808 | valid without haiku: 93 acc 0.731
+== plus_heldout
+  qwen-1.5b     {0: 'used 2/150 acc 0.69'}
+  qwen-7b       {1: 'used 139/150 acc 0.69'}
+  claude-haiku  {3: 'used 8/150 acc 0.69'}
+  episodes with haiku: 8 acc 1.0 | haiku as last step: 8 acc 1.0 | valid without haiku: 127 acc 0.756
