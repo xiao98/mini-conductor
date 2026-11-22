@@ -1,0 +1,64 @@
+# Same-size local specialists: three 1.5B Qwen2.5 variants, so "which worker" has no
+# size-based answer and should depend on the task. No API calls anywhere.
+# VRAM in bf16: ~15GB (Conductor 7B) + 3 x ~3GB (workers) + activations -> needs a 40GB card.
+
+name: local_specialists
+reference_cost_usd: 0.001
+max_steps: 5
+max_depth: 2
+
+workers:
+  - id: 0
+    name: qwen-general-1.5b
+    backend: local_hf
+    model_name: Qwen/Qwen2.5-1.5B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (0x)"
+    max_tokens: 1024
+    temperature: 0.2
+    description: >-
+      Small general-purpose 1.5B model. Reasonable at reading comprehension, science
+      multiple-choice questions and summarizing or comparing other workers' answers.
+
+  - id: 1
+    name: qwen-math-1.5b
+    backend: local_hf
+    model_name: Qwen/Qwen2.5-Math-1.5B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (0x)"
+    max_tokens: 1024
+    temperature: 0.2
+    description: >-
+      Small 1.5B model specialized for mathematics: algebra, number theory, combinatorics,
+      geometry and step-by-step derivations. Not trained for programming or general questions.
+
+  - id: 2
+    name: qwen-coder-1.5b
+    backend: local_hf
+    model_name: Qwen/Qwen2.5-Coder-1.5B-Instruct
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "free (0x)"
+    max_tokens: 1024
+    temperature: 0.2
+    description: >-
+      Small 1.5B model specialized for programming: writing and debugging Python functions
+      and algorithms. Weaker than the others on mathematics and science questions.
+
+  - id: 3
+    name: self
+    backend: conductor_self
+    model_name: self
+    input_cost_per_mtok: 0.0
+    output_cost_per_mtok: 0.0
+    cost_tier: "recursive orchestrator"
+    max_tokens: 1024
+    temperature: 0.6
+    description: >-
+      Recursive call to the Conductor itself. Assign this when previous workers might
+      disagree or fail on a hard problem so you can inspect their real outputs and
+      dynamically design a follow-up verification or refinement sub-plan.
+
+held_out_workers: []

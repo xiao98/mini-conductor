@@ -60,6 +60,16 @@ def static_parallel_judge_plan(view: EpisodeWorkerView) -> str:
     return f"<plan>\nmodel_id = {ids!r}\nsubtasks = {subtasks!r}\naccess_list = {access!r}\n</plan>"
 
 
+def all_worker_calls(trace: RolloutTrace) -> list[str]:
+    """Worker names of every step, including steps inside recursive sub-plans."""
+    names: list[str] = []
+    for step in trace.steps:
+        names.append(step.worker_name)
+        if step.child_trace is not None:
+            names.extend(all_worker_calls(step.child_trace))
+    return names
+
+
 async def _verify(item: dict[str, Any], text: str) -> tuple[bool, str]:
     return await asyncio.to_thread(
         verify_answer, item["task_type"], text, item["ground_truth"], item.get("metadata")
@@ -142,6 +152,8 @@ async def eval_orchestration(
             "parallel_width": tr.max_parallel_width,
             "recursion_triggered": tr.recursion_triggered,
             "workers_used": [s.worker_name for s in tr.steps],
+            "workers_used_all": all_worker_calls(tr),
+            "worker_ids": dict(view.name_to_id),
             "plan": tr.conductor_turns[0].completion_text,
         }
         return tr, ok, detail
